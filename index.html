@@ -1,0 +1,363 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Practice</title>
+    <style>
+        /* Base reset for full-screen layout */
+        html, body {
+            margin: 0;
+            padding: 0;
+            height: 100%;
+        }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            line-height: 1.6;
+            color: #FFFFFF;
+            background-color: #000000;
+            padding-top: 32px; 
+            box-sizing: border-box;
+        }
+        #ribbon {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            background-color: #000000;
+            padding: 12px 16px; 
+            box-shadow: 0 2px 5px rgba(0,0,0,0.5);
+            z-index: 1000;
+            display: flex;
+            justify-content: flex-start;
+            align-items: center;
+            border-bottom: 1px solid #222;
+            box-sizing: border-box;
+        }
+
+        #paste-go-btn {
+            padding: 8px 48px;
+            font-size: 0.9rem; 
+            color: #FFFFFF;
+            background-color: #000000;
+            border: 1px solid #4D4D4D;
+            border-radius: 5px;
+            cursor: pointer;
+            font-weight: bold;
+            transition: background-color 0.2s ease-in, border-color 0.2s ease-in;
+        }
+        #paste-go-btn:hover {
+            background-color: #222;
+            border-color: #666;
+        }
+        #paste-go-btn:active {
+            background-color: #333;
+            border-color: #888;
+        }
+
+        #game-container {
+            width: 100%;
+            min-height: calc(100vh - 115px);
+            padding: 30px 5%;
+            /* THIS IS THE FIX: Ensures there is always space to scroll into */
+            padding-bottom: 60vh; /* 60% of the viewport height */
+            background-color: #000000;
+            font-size: 1.2rem;
+            white-space: pre-wrap;
+            box-sizing: border-box;
+        }
+        
+        #previous-sentences {
+            color: #666;
+        }
+        #current-sentence-progress {
+            color: #ccc;
+        }
+
+        #choices-wrapper {
+            position: relative;
+            display: inline-block;
+            width: 100px;
+            border-bottom: 2px solid #555;
+            margin: 0 4px;
+            height: 1.2rem;
+            vertical-align: bottom;
+        }
+
+        #word-choices {
+            position: absolute;
+            top: 100%;
+            left: 50%;
+            transform: translateX(-50%);
+            margin-top: 8px;
+            z-index: 10;
+            display: flex;
+            flex-direction: column;
+            background-color: #111;
+            border: 1px solid #333;
+            border-radius: 5px;
+            padding: 5px;
+        }
+        
+        #word-choices button {
+            background: none;
+            padding: 8px 12px;
+            font-size: 1.1rem;
+            cursor: pointer;
+            text-align: left;
+            border-radius: 4px;
+            margin: 2px 0;
+            color: #FFFFFF;
+            border: 1px solid transparent;
+        }
+        #word-choices button:hover {
+            background-color: #007bff;
+            color: white;
+        }
+        #word-choices button:disabled {
+            cursor: not-allowed;
+            opacity: 0.7;
+        }
+
+        @keyframes flash-red-border {
+            0%, 100% { border-color: #F44336; }
+            50% { border-color: transparent; }
+        }
+        .incorrect-flash {
+            animation: flash-red-border 0.6s ease-in-out;
+        }
+
+        .feedback {
+            text-align: center;
+            margin: 20px 0;
+            font-weight: bold;
+            font-size: 1.2rem;
+            height: 30px;
+        }
+        .correct {
+            color: #4CAF50;
+        }
+
+        #manual-paste-container {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 15px;
+            padding-top: 20px;
+        }
+        #manual-paste-container textarea {
+            width: 80%;
+            max-width: 600px;
+            height: 150px;
+            background-color: #111;
+            color: #eee;
+            border: 1px solid #4D4D4D;
+            border-radius: 5px;
+            padding: 10px;
+            font-size: 1rem;
+            font-family: inherit;
+        }
+        #manual-paste-container button {
+            padding: 8px 24px;
+            font-size: 0.9rem;
+            color: #FFFFFF;
+            background-color: #007bff;
+            border: 1px solid #007bff;
+            border-radius: 5px;
+            cursor: pointer;
+            font-weight: bold;
+            transition: background-color 0.2s ease-in, border-color 0.2s ease-in;
+        }
+        #manual-paste-container button:hover {
+            background-color: #0056b3;
+            border-color: #0056b3;
+        }
+
+    </style>
+</head>
+<body>
+
+    <div id="ribbon">
+        <button id="paste-go-btn">Paste and Go</button>
+    </div>
+
+    <div id="game-container">
+        <!-- The initial state will be injected here by the script -->
+    </div>
+    <div id="feedback" class="feedback"></div>
+
+
+    <script>
+        const pasteGoBtn = document.getElementById('paste-go-btn');
+        const gameContainer = document.getElementById('game-container');
+        const feedback = document.getElementById('feedback');
+
+        let allWords = [];
+        let cleanWords = [];
+        let currentWordIndex = 0;
+
+        // Display the paste box on initial load
+        document.addEventListener('DOMContentLoaded', showPasteBox);
+
+        pasteGoBtn.addEventListener('click', startGameWithClipboard);
+
+        async function startGameWithClipboard() {
+            if (!navigator.clipboard || typeof navigator.clipboard.readText !== 'function') {
+                alert("Clipboard API not available. Please paste your text manually.");
+                return;
+            }
+            try {
+                const text = await navigator.clipboard.readText();
+                if (text.trim() === "") {
+                    alert("Clipboard is empty. Please copy some text to practice.");
+                } else {
+                    initializeGame(text);
+                }
+            } catch (err) {
+                console.error('Failed to read clipboard contents automatically: ', err);
+                alert("Could not read from clipboard. Please paste your text manually.");
+            }
+        }
+        
+        function showPasteBox() {
+            gameContainer.innerHTML = `
+                <div id="manual-paste-container">
+                    <p>Paste your text below, or click "Paste and Go" to use your clipboard.</p>
+                    <textarea id="manual-text-input" placeholder="Paste your text here..."></textarea>
+                    <button id="manual-start-btn">Start Practice</button>
+                </div>
+            `;
+            document.getElementById('manual-start-btn').addEventListener('click', () => {
+                const text = document.getElementById('manual-text-input').value;
+                initializeGame(text);
+            });
+             // Reset feedback message when showing the paste box
+            feedback.textContent = '';
+            feedback.className = 'feedback';
+        }
+
+        function initializeGame(text) {
+            if (text.trim() === "") {
+                alert("No text provided. Please paste some text to begin.");
+                return;
+            }
+
+            allWords = text.split(/(\s+)/).filter(word => word.length > 0);
+            cleanWords = text.match(/\b[\w']+\b/g) || [];
+            currentWordIndex = 0;
+            feedback.textContent = '';
+            pasteGoBtn.textContent = 'Paste and Go';
+            displayGame();
+        }
+
+        function displayGame() {
+            if (currentWordIndex >= allWords.length) {
+                feedback.textContent = 'Practice complete!';
+                feedback.className = 'feedback correct';
+                pasteGoBtn.textContent = 'Practice Again';
+                // Show the paste box again for a new session
+                showPasteBox();
+                return;
+            }
+
+            if (/\s+/.test(allWords[currentWordIndex])) {
+                currentWordIndex++;
+                displayGame();
+                return;
+            }
+
+            const completedText = allWords.slice(0, currentWordIndex).join('');
+            const correctWord = allWords[currentWordIndex];
+
+            let previousSentencesText = '';
+            let currentSentenceProgressText = '';
+            const lastPunctuationIndex = Math.max(
+                completedText.lastIndexOf('.'),
+                completedText.lastIndexOf('?'),
+                completedText.lastIndexOf('!')
+            );
+
+            if (lastPunctuationIndex === -1) {
+                currentSentenceProgressText = completedText;
+            } else {
+                previousSentencesText = completedText.substring(0, lastPunctuationIndex + 1);
+                currentSentenceProgressText = completedText.substring(lastPunctuationIndex + 1);
+            }
+            
+            gameContainer.innerHTML = `
+                <div id="text-line">
+                    <span id="previous-sentences">${previousSentencesText}</span><span id="current-sentence-progress">${currentSentenceProgressText}</span><div id="choices-wrapper">
+                        <div id="word-choices"></div>
+                    </div>
+                </div>
+            `;
+            
+            const wordChoicesContainer = document.getElementById('word-choices');
+            const choices = generateChoices(correctWord);
+            
+            choices.forEach(choice => {
+                const button = document.createElement('button');
+                button.textContent = choice;
+                button.addEventListener('click', () => checkAnswer(choice, correctWord, button));
+                wordChoicesContainer.appendChild(button);
+            });
+
+            adjustScrollForChoices();
+        }
+
+        function adjustScrollForChoices() {
+            setTimeout(() => {
+                const choicesBox = document.getElementById('word-choices');
+                if (!choicesBox) return;
+
+                const boxRect = choicesBox.getBoundingClientRect();
+                const viewportHeight = window.innerHeight;
+
+                if (boxRect.bottom > viewportHeight) {
+                    const gameContainer = document.getElementById('game-container');
+                    let lineHeight = parseFloat(window.getComputedStyle(gameContainer).lineHeight);
+                    
+                    if (isNaN(lineHeight)) {
+                        lineHeight = 24;
+                    }
+
+                    // The desired margin is now precisely 11 lines
+                    const desiredMargin = 11 * lineHeight;
+                    
+                    const scrollAmount = boxRect.bottom - viewportHeight + desiredMargin;
+
+                    window.scrollBy({
+                        top: scrollAmount,
+                        behavior: 'smooth'
+                    });
+                }
+            }, 0);
+        }
+        
+        function generateChoices(correctWord) {
+            // This function now only returns the single, correct word.
+            return [correctWord];
+        }
+
+        function checkAnswer(selectedWord, correctWord, buttonElement) {
+            const allButtons = buttonElement.parentElement.querySelectorAll('button');
+            allButtons.forEach(btn => btn.disabled = true);
+
+            if (selectedWord === correctWord) {
+                currentWordIndex++;
+                feedback.textContent = '';
+                setTimeout(displayGame, 50);
+            } else {
+                // This 'else' block is now effectively unreachable,
+                // but is kept for structural integrity.
+                buttonElement.classList.add('incorrect-flash');
+                setTimeout(() => {
+                    buttonElement.classList.remove('incorrect-flash');
+                    allButtons.forEach(btn => btn.disabled = false);
+                }, 600);
+            }
+        }
+    </script>
+
+</body>
+</html>
